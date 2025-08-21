@@ -1,0 +1,108 @@
+This distribution contains the second public release of a package
+maintenance and distribution facility for Linux.  Thank you for your
+interest in StopAlop, I hope that it will provide as much utility to
+your system as it has ours.
+
+The distribution has been uploaded to the incoming directory on tsx-11.
+I have asked Michael to move it to the BETA/packaging directory and it
+should propagate to other sites.
+
+I have the code labelled as BETA but it has been in use for about a
+year at our Center without major problems.  But the first few times one
+releases something....  I would appreciate any and all comments when
+you find bugs.
+
+Stopalop has the following abilities:
+
+	1.) Generation of packages/distribution.
+	2.) Installation of packages.
+	3.) Documentation (listing) of installed packages.
+	4.) Package removal.
+	5.) Verification of package integrity (file presence,
+	    permissions and ownerships.).
+
+The accompanying documentation file outlines the design principles and
+describes the basic functioning of the program.  Please read through
+this before subjecting your filesystem to this utility.
+
+Enclosed in the distribution should be the following files:
+
+	README:		This file.
+	StopAlop.doc:	Introductory document and examples.
+	COPYING:	The GNU Public License under which StopAlop is
+			distributed.
+	stopalop:	The utility itself.
+
+
+	*** Note that it will be very helpful if you review the contents
+	    of the StopAlop.doc file before proceeding.
+
+GOALS
+
+	My hope is that the Linux community will be able to use
+	StopAlop as a generic package installation method.  The ample
+	traffic in the newsgroup's seems to indicate that such a
+	utility would be of use.
+
+	A common criticism of UNIX(c) based systems has been the
+	difficulties associated with installation/maintenance.  One
+	method of having Linux succeed is to avoid committing this
+	sin, Linux must be attractive to users who have grown up
+	having their hands held.  While I am not a great fan of binary
+	only distributions I believe that the current environment
+	almost makes this a necessity.  StopAlop is designed to
+	provide at least a minimal framework for this distribution. IT
+	IS NOT designed to enforce any type of filesystem standard as
+	I believe that this is as hopeless as source only distributions.
+
+	StopAlop may not be the answer to this problem but I firmly
+	believe that there must be a movement made in the direction of
+	some form of standardization of distributions.	Considering
+	the load developing on some of the major FTP sites,
+	downloading a complete distribution in order to upgrade a
+	single component is not an attractive alternative.
+	
+	Writing installation scripts is not something very sexy but
+	absolutely critical to the acceptance of an operating
+	environment.  My research group has developed the following
+	sets of modules controlled by the StopAlop system.
+
+		1.) Boot/installation diskette.
+		2.) Basic binary package, shell-utils, file-utils,
+		    UUCP etc.
+		3.) EMACS (Version 18.59b).
+		4.) TeX.
+		5.) XFree1.2.
+		6.) Networking.
+		7.) GCC/development.
+
+	If there is interest shown by the community I could package
+	some of these modules up and place them with the StopAlop
+	package.  They are representative of how StopAlop can be used
+	to form an integrated release environment.  All of these
+	modules form the basis of our corporate Linux network and as
+	such are essentially snapshots of fully functional trees.
+
+	NOTE: I am not interested in stepping on any of the package
+	distributer's toes.  I am also not interested in defining a
+	filesystem standard as I believe that this is hopeless.  I am
+	just making this package available in response to ongoing
+	discussions in c.o.l.d. and because I think there is a need to
+	get a standardized packaging methodology implemented in the Linux
+	community.
+
+Any discussions/commentary are welcome.  Hopefully this will prove to
+be of utility to some groups.
+
+
+                           As always,
+                           Dr. G.W. Wettstein
+                           Oncology Research Division Computing Facility
+                           Roger Maris Cancer Center / MeritCare
+
+                           UUCP: uunet!plains!wind!greg
+                           INTERNET: greg%wind.UUCP@plains.nodak.edu
+                           PHONE: 701-234-2833
+
+`The truest mark of a man's wisdom is his ability to listen to other men
+ expound their wisdom.'
