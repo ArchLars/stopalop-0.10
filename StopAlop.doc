@@ -1,0 +1,446 @@
+      StopAlop - A Linux Package Maintenance Facility - Beta 0.10
+		    -----------------------------
+
+Designed to:
+
+	1.) Stop A Lot Of Problems.
+	2.) Stop ALOPecia.
+
+		n.b.: Alopecia is the medical term for the loss of one's
+		      hair.  This can be caused by such things as old age
+		      or by the administration of chemotherapeutic agents.
+		      Under UNIX/Linux it can be caused by physically
+		      pulling your hair out, usually because a file
+		      is missing or a directory ownership is wrong.  I 
+		      haven't figured out how to stop chemotherapy from
+		      doing it but this is my shot at the Linux end of
+		      things.
+
+					Dr. G.W. Wettstein
+
+
+INTRODUCTION:
+
+	StopAlop is a program that was written at our Cancer Center to
+	aid in the maintenance of our network of Linux machines.  
+
+	When we began replacing our commercial UNIX systems with Linux
+	it quickly became apparent that a facility was needed to allow
+	the rapid, error-free installation of binary packages.  An
+	additional factor that became important was the need for
+	version control on the binary packages that were being
+	installed.  StopAlop is an attempt to address both these
+	needs.
+
+	StopAlop was written from both the user and the maintainer's
+	point of view.  For the user it provides a standardized method
+	of loading software packages.  The program also provides the
+	ability to list packages which have been installed and to
+	check package integrity.  Integrity checking allows the user
+	to easily verify that all members of the distribution are
+	present and have the appropriate permissions and ownerships.
+
+	From a maintenance point of view the program provides a method
+	of rapidly preparing a distribution package while reducing the
+	potential for packaging errors.  StopAlop is designed to
+	capture a package, as it exists on the developer/maintainer's
+	disk and prepare a a distribution package that can be
+	accurately reproduced on end-user machines.
+
+
+DESIGN STRATEGIES:
+
+	The first and foremost concept embodied in this release was to
+	provide basic functionality.  In our research group this is
+	referred to as 'Lombardi Programming'.  Vince Lombardi always
+	told people that the Green Bay Packers only had a couple of
+	plays but they tried to run those plays the same way every
+	time.
+
+	StopAlop attempts to implement a basic set of functionality
+	with a minimum of fanfare and most importantly with the least
+	potential for error.  In its present form it creates
+	distributions, lists distributions, checks distributions and
+	removes distributions.  Hopefully it will conduct these basic
+	functions with monotonic regularity.
+
+	Contingent with this design strategy is the utilization of a
+	minimum set of system tools.  Whenever possible functions were
+	implemented with the functionality provided by BASH's version
+	of the Bourne Shell.  All that should be needed to install a
+	package with StopAlop is the program itself, CPIO, tar, mkdir
+	and mv.
+
+	Additional functionality such as package creation and
+	integrity checking requires a minimum set of additional tools
+	which include sed, cut and ls.  The general motivation is to
+	allow the package to work with utilities which can be squeezed
+	onto a bootable/rootable floppy.
+
+	The final design concern was to make the packaged archives be
+	as portable and as bullet-proof as possible.  Those who wander
+	through the code will notice the use of CPIO to create a
+	distribution directory 'template'.  Those individuals familiar
+	with various buggy versions of tar will understand the
+	importance of this maneuver.  To those fortunate enough not to
+	have these experiences this strategy insures that special
+	files such as directories, device nodes, symlinks etc are
+	properly transferred and created.
+
+
+WHAT YOU WILL NEED (System Requirements):
+
+	IBM Personal System/2 Model 25, 30,
+	25-286, 60 65, 70.
+	Personal Computer XT
+	Personal Computer
+	XT-286
+
+	IBM Display or equivalent.
+
+	512Kbyte of memory.
+
+	One 720KB 3.5-inch diskette drive, or
+	One 1.44MB 3.5inch diskette drive.
+	Hard Drive recommended.
+
+
+
+	A Small joke............ :-)
+
+
+
+	Here's what we really need:
+	1.) BASH *
+	2.) The stopalop utility.
+	3.) tar **
+	4.) cpio
+	5.) mkdir
+	6.) ls
+	7.) mv
+	8.) rm
+	9.) sed
+	10.) cut
+	11.) cat
+	12.) find ***
+
+	*  We use BASH exclusively as our command shell.  I have tried
+	   to write StopAlop as generically as possible but cannot
+	   guarantee its behavior under alternate shells.  Let me know
+	   if there are any constructs which prove troublesome.
+
+	**  StopAlop was developed with GNU tar and specifically
+	    requires the -M (multi-volume) archive option if
+	    distributions are to be placed onto floppies.
+
+	***  Find is only required if the user wants to use the -g
+	     switch (documented below) to generate packaging control
+	     files.  Extractions do not require it.  Again GNU find is
+	     the benchmark but StopAlop uses nothing sophisticated.
+
+
+EXAMPLES OF USE:
+
+	If invoked with no arguments the program will describe how to
+	get a usage summary.
+
+	By default the program will install packages onto the root
+	directory.  In order to function properly the utility must be
+	run with sufficient privileges to write to the root directory.
+	As part of the installation process a directory (INSTALL) will
+	be created on the root directory.  Within this directory will
+	be sub-directories which correspond to each package which has
+	been installed by StopAlop.
+
+	To create a package a minimum of two files are required.  By
+	default these filenames are filelist and specials.  The
+	filelist file will contain a list of all regular files which
+	make up the distribution.  The specials file will contain a
+	list of all non-regular files (directory entries, symbolic
+	links, device nodes, fifo's etc).
+
+		Example: To generate a distribution which will contain
+			 the contents of the /lib directory use the
+			 following sequence of commands:
+
+		         $ cd /
+			 $ find ./lib -type f >/tmp/filelist
+		         $ find ./lib \! -type f -depth >/tmp/specials
+			 $ cd /tmp
+			 $ stopalop -c libs -f libfiles.tar
+
+	By default the program will assume that the distribution is to
+	be rooted in /.  It is important to note that the file lists
+	must be generated relative to the directory that the
+	distribution is to be unpackaged into.  The -f switch
+	specifies that the distribution is to be placed in a file
+	called libfiles.tar in the current directory, which in this
+	case would be /tmp.  By default the utility would attempt to
+	create the archive on /dev/fd0.
+
+	To facilitate package generation StopAlop has the capability
+	to generate the distribution control files 'on the fly'.  The
+	-g switch instructs StopAlop to generate the filelist and
+	specials files.  If the create (-c) arguement is not given the
+	-g switch causes StopAlop to terminate after file generation.
+	This allows inspection of the control files which were
+	generated.
+
+		Example: To generate a list of distribution files for
+			 a distribution rooted in the current
+			 directory use the following command:
+
+			 $ stopalop -g -r ./
+
+		Example: To create a distribution package from the
+			 current directory with the distribution
+			 control files automatically generated use the
+			 following command:
+
+			 $ stopalop -g -c pkgname -r ./
+
+
+	To demonstrate unpacking the distribution the following
+	sequence of commands can be used:
+
+			$ cd /tmp
+			$ stopalop -x -f libfiles.tar -r `pwd`
+
+	The -x switch tells the program to extract a distribution
+	(unique huh..).  The -f switch gives the source device (file)
+	and the -r switch defines where the distribution is to be
+	rooted.  Using the -r switch with the pwd command will have
+	the effect of unpacking the distribution in the current
+	directory.
+
+	If all goes well there will be a subdirectory in tmp
+	containing an image of the /lib directory on the root.  There
+	will also be an additional directory in /tmp called INSTALL.
+	Within INSTALL there will be a sub-directory called libs.
+	Within the sub-directory there will be five files: libs.in,
+	libs.fl, libs.sp, libs.tm, libs.pm.  The contents of these
+	files will be as follows:
+
+		libs.in:->	The installation program which was
+				automatically generated by the
+				packaging step.
+
+		libs.fl:->	A file containing the list of regular
+				files in the distribution.
+
+		libs.sp:->	A file containing the list of special
+				files in the distribution.
+
+		libs.tm:->	A CPIO file containing a directory
+				'template' of the distribution.
+
+		libs.pm:->	A permissions file defining the
+				permissions and ownership of each file
+				in the distribution.
+
+	The following command can be used to list the packages which
+	have been installed.  In this case there will be of course
+	only one installed package.  To wit:
+
+		$ cd /tmp
+		$ stopalop -l -r `pwd`
+
+	It is important to note that the root directory must be
+	specified again since by default the program assumes that all
+	distributions are rooted in /.
+
+	To continue onward with the test/demonstration the following
+	commands can be used to check the 'integrity' of the installed
+	package:
+
+		$ cd /tmp
+		$ stopalop -i libs -r `pwd`
+
+	StopAlop will announce what it is doing and should terminate
+	without making any noise.  A useful test may be to change the
+	permissions of one of the files or optionally delete one of
+	the files and re-run the integrity check.  Stopalop should
+	complain about finding a problem in the distribution.
+
+	To complete the test the distribution will be removed.  The
+	following sequence of commands will perform this task:
+
+		$ cd /tmp
+		$ stopalop -u libs -r `pwd`
+
+	The program will again announce its intentions and then remove
+	all references to the package.  This includes the contents of
+	the ./lib directory, the ./lib directory itself and the ./libs
+	sub-directory in the ./INSTALL directory.  Note that the
+	./INSTALL directory will not be removed.
+
+
+CUSTOMIZATION:
+
+	The are three areas of customization which can be exploited with
+	the current version of the utility.  These are: 1.) definition of a
+	version label, 2.) customization of the installation program
+	and 3.) customization of package removal.
+
+	A version label is specified with the -v switch.  Version
+	labels with embedded spaces must be protected by quoting.  For
+	example if the venerable HLU were to use this for packaging
+	the jump table libraries the following command could be used:
+
+		$ ./stopalop -c jump-4.4.1 -v "Jump Lib 4.4.1"
+
+	The distribution would be named jump-4.4.1 and the -l command
+	would display something like this:
+
+		jump-4.4.1 - Version: Jump Lib 4.4.1
+
+	One important caveat to note when naming a package with the -c
+	switch is to take into account destination filesystems and
+	file name conventions.  The package name will be used as the
+	name of the installed packages' installation directory so the
+	package name must only contain something which translates
+	into a valid directory name.  For example the following
+	command would produce an error on installation:
+
+		$ ./stopalop -c gcc/development -v "gcc 2.3.3"
+
+		The reason for the error in this case is that the
+		forward slash would be interpreted as a directory
+		separator and the installation program could not
+		create gcc/development since the directory gcc
+		probably does not exist.
+
+	The second factor to be concerned about is the length of the
+	filenames.  When the package is installed three character
+	suffixes are appended to the base package name.  The MINIX
+	filesystem would thus limit package names to a maximum of 11
+	characters.  Overflowing the filename length will lead to
+	unpredictable results.  This problem can be circumvented by
+	using either the ext2 filesystem or the MINIX filesystem with
+	30 character names.
+
+	The second customization revolves around producing a
+	customized installation utility.  A default installation
+	program will be created when the distribution is packaged.
+	This is a bare minimum installation program which will create
+	a directory structure and unpack the contents of the package
+	onto the structure.
+
+	The packaging routines look for any one of the following three
+	files when an installation script is built: install,
+	pre-install and post-install.
+
+		n.b.:	By now everyone is thinking, boy has this guy
+			got the corner on unique names.....
+
+	If the install program is present the packaging routines will
+	substitute the code in the file for the default installation
+	script.  This should rarely be necessary but it is available
+	if needed.
+
+	The pre-install and post-install files will be encapsulated in
+	functions called PreInstallHook and PostInstallHook.  Again
+	those catchy names....  The default installation script will
+	call these functions as part of the normal installation
+	process.  If an installation file is supplied the user is on
+	their own to make sure that these routines get called.  Note
+	that the pre and post install programs will be encapsulated in
+	the above functions, this is probably a design flaw.  Consider:
+
+	      An example of the use of a post-install hook would be for
+              the installation of gcc.  The following code could be
+              placed into a post-installation hook to make sure that
+              the links are established to the kernel header include
+              directories. 
+
+		directory="";
+		while [ $directory = "" ];
+		do
+			echo "Enter directory of kernel sources:->\c";
+			read directory;
+			if [ \! -d $directory ]; then
+				echo "Directory not found.";
+				directory="";
+			fi;
+		done;
+		ln -sf $directory/include/linux /usr/include/linux;
+		ln -sf $directory/include/asm /usr/include/asm;
+
+	      This code will be automatically included in the
+	      installation file and called after the gcc distribution
+	      has been unpackaged.
+
+	The sky should be about the limit for the type of
+	customizations that can be created with the use of pre- and
+	post-install hooks.  The nice feature of StopAlop for the
+	developer/maintainer is that once the file lists and
+	installation files are created the utility will faithfully
+	reproduce the installation every time a new copy of the
+	package is created.
+
+	The final area of customization is the use of a
+	pre-package-removal hook.  This facility allows the package
+	designer/maintainer to perform generalized clean-up before
+	StopAlop commences removal of the files named in the package
+	distribution.  A pre-package-removal hook is included in the
+	distribution by placing the necessary code in a file called
+	remove-pkg in the directory containing the distribution.
+
+		The following example of a removal hook is lifted from
+		the StopAlop networking module:
+
+		netdir=$root"etc/inet";
+		# This code performs clean-up functions prior to the
+		# removal of the networking package.
+
+		# Remove the named.pid and named.boot file if they exist.
+		if [ -f $netdir/named.pid ]; then rm $netdir/named.pid; fi;
+		if [ -f $netdir/named.boot ]; then rm $netdir/named.boot; fi;
+
+	Those individuals designing packages will note that the
+	installation and removal packages will be called in a manner
+	which guarantess that $root will contain the directory where
+	the distribution is 'rooted'.
+
+
+CAVEATS:
+
+	I didn't mention anything in the /lib example but I assume
+	that nobody is going to try this out on their root partition.
+
+	The program as it sits is no blaze of speed, actually poky as
+	hell is probably an apt description.  BASH does not seem to be
+	a blaze of speed when it comes to executing script.  I
+	stripped out all the comments but that doesn't seem to
+	influence execution rate very much.  The problem seems to be
+	in parsing because once it gets cranked up things go fairly
+	quickly.
+
+	I would have normally written this type of thing in PERL but
+	its too big for sitting on a bootable/rootable floppy.
+	Perhaps if it catches on down the road I could teach StopAlop
+	to search for PERL and feed a portion of itself to, hmmm.....
+
+	The source as always is probably the best reference.  I have
+	tried to comment things well enough so that a person can amble
+	through it and have some hope of knowing whats going on.  I'm
+	not much of a programmer so be gentle.
+
+
+FINIS:
+
+	I will look forward to any and all constructive comments.  If
+	this is something that the package maintainers, developers,
+	and users feel that Linux needs I would feel it a privilege to
+	have it distributed.  If not it meets our needs just fine.  I
+	will look forward to hearing from anybody that puts StopAlop
+	into action.  Thank you for your attention.
+
+					G.W.
+
+
+
+---------------------------------------------------------------------------
+ My vote for the Linux creed?  `I'd rather spend 7 days reading someone
+ else's source than 5 minutes listening to Musak waiting for technical
+ support that isn't.'

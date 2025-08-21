@@ -1,0 +1,822 @@
+#! /bin/sh
+#*****************************************************************************
+#* $Source: /u/gnu/linux/src/bin/stopalop/RCS/stopalop,v $
+#*
+#* $Author: greg $
+#*
+#* $Revision: 0.10 $
+#*
+#* $State: Exp $
+#*
+#* $Date: 1993/05/06 20:13:18 $
+#*
+#* Copyright(C) 1993, Enjellic Systems Development and Dr. Greg Wettstein.
+#****************************************************************************/
+
+# $Id: stopalop,v 0.10 1993/05/06 20:13:18 greg Exp $
+
+#
+# $Log: stopalop,v $
+# Revision 0.10  1993/05/06  20:13:18  greg
+# Forgot to bump version number.  Too bad, so sad that 0.9 was so short
+# lived.
+#
+# Revision 0.9  1993/05/06  20:08:43  greg
+# Added auto-version numbering.  When creating a package a check is made
+# to determine whether or not a file named version is found in the root
+# directory.  If the file is present its contents is used as the version
+# number.  Note that the -v switch takes precedence.
+#
+# Implemented the ability to define a customized de-installation hook which
+# is run before the standard de-installation mechanism.  To implement a
+# customized hook of this type the Bourne shell code should be placed in
+# a file called remove-pkg in the root directory.  This code will be
+# automatically executed before the package is de-installed.
+#
+# Revision 0.8  1993/04/02  22:11:29  greg
+# Modified GenerateFilelists function to use sed to screen out excluded
+# files.  The -name option of find was too inflexible and resulted in
+# exclusion of files in other than the root directory.
+#
+# Revision 0.7  1993/04/02  17:30:54  greg
+# Changed the GenerateFilelists function so that all excluded files are
+# relative to the current directroy only.  Users should be wary that
+# files in their distributions do not have any of these reserved names
+# in the root directory of the distribution.
+#
+# Added an additional configuration file called version which if present
+# will contain the current version string of the package being created.
+#
+# Revision 0.6  1993/03/11  17:22:44  greg
+# First public release.
+#
+# Added GenerateFilelist function to support the -g option which enables
+# the generation of the packaging configuration files.
+#
+# Added GNU licensing information.  Updated documentation file.
+#
+#
+
+#    StopAlop - A package maintenance and installation facility.
+
+#    This program is free software; you can redistribute it and/or modify
+#    it under the terms of the GNU General Public License as published by
+#    the Free Software Foundation; either version 2 of the License, or
+#    (at your option) any later version.
+
+#    This program is distributed in the hope that it will be useful,
+#    but WITHOUT ANY WARRANTY; without even the implied warranty of
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    GNU General Public License for more details.
+
+#    You should have received a copy of the GNU General Public License
+#    along with this program; if not, write to the Free Software
+#    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+# Designed to:
+#	1.) Stop A Lot Of Problems.
+#	2.) Stop ALOPecia.
+#
+#		n.b.: Alopecia is the medical term for the loss of one's
+#		      hair.  This can be caused by such things as old age
+#		      or by the administration of chemotherapeutic agents.
+#		      Under UNIX/Linux it can be caused by physically
+#		      pulling your hair out, usually because a file
+#		      is missing or a directory ownership is wrong.  I 
+#		      haven't figured out how to stop chemotherapy from
+#		      doing it but this is my shot at the Linux end of
+#		      things.
+#
+#				Dr. G.W. Wettstein
+#				Oncology Research Division Computing Facility
+#				Roger Maris Cancer Center
+#				820 4th St. N.
+#				Fargo, ND  58122
+#				INTERNET: greg%wind.UUCP@plains.nodak.edu
+#				Phone: 701-234-2833
+
+# Uncomment the following line(s) if you are attempting to fix things that
+# are broken... :-(, or make things better... :-)
+# squashing_bugs=true;
+
+# Definition of useful variables.
+version="Beta 0.10";
+action=whoami;
+if [ $squashing_bugs ]; then source=StopAlop.tar; else source=/dev/fd0; fi;
+
+curwd=`pwd`;
+if [ $squashing_bugs ]; then rootdir=`pwd`; else rootdir=/; fi;
+installdir=INSTALL;
+
+filelist="filelist";
+specials="specials";
+template="template";
+permissions="permissions";
+install="install";
+
+
+###########################################################################
+# Function:	ErrorExit
+#
+# Description:	This function emits an error message and exits with
+#		a non-zero return status.
+#
+# Arguements:	The error message which is to be printed.
+###########################################################################
+
+ErrorExit(){
+	echo $*;
+	exit 1;
+}
+
+
+###########################################################################
+# Function:	DisplayHeader
+#
+# Description:	Displays program title and version.
+#
+# Arguements:	None specified.
+#
+# Returns:	Undefined.
+##########################################################################
+
+DisplayHeader(){
+	echo "StopALOP - A Linux Package Maintenance Facility - $version";
+	return;
+}
+
+
+###########################################################################
+# Function:	Usage
+#
+# Description:	This function prints the name of the program, the version
+#		number and a list of available options.
+#
+# Arguements:	None
+#
+# Returns:	Nothing
+###########################################################################
+
+Usage(){
+	DisplayHeader;
+	echo "	-?		Print usage summary.";
+	echo "	-c name		Create a distribution package with name.";
+	echo "	-i name		Check integrity of an installed package.";
+	echo "	-l		List installed packages.";
+	echo "	-x		Extract a distribution package.";
+	echo "	-u name		Un-install a package.";
+	echo
+	echo "	-g		Auto-generate package file lists.";
+	echo "	-f name		Name of device or file containing package.";
+	echo "	-r rootdir	Set root directory for package.";
+	echo "	-v version	Set the version number of a package.";
+	echo 
+	echo "	Installation root: $rootdir";
+	echo "	Installation directory: $installpath";
+	echo "	Default archive: $source";
+
+	return;
+}
+
+
+###########################################################################
+# Function:	ListPackages
+#
+# Description:	This function lists all the packages which have been installed
+#		by STOPALOP.
+#
+# Arguements:	None specified.
+#
+# Output:	Returns nothing, lists the packages and their versions on
+#		the standard output.
+###########################################################################
+
+ListPackages(){
+	declare -i pkgcnt=0;
+
+	# Check to make sure that STOPALOP can function.
+	cd $rootdir;
+	if [ ! -d $installdir ]; then
+		ErrorExit "No installation directory.";
+	fi;
+
+	# Now have each package tell us who it is.
+	DisplayHeader;
+	cd $installdir;
+	for package in *;
+	do
+		if [ -f ./$package/$package.in ]; then
+			if [ $pkgcnt -eq 0 ]; then
+				echo "Packages installed:";
+			fi;
+			echo "\t\c";
+			./$package/$package.in -v;
+			pkgcnt=$pkgcnt+1;
+		fi;
+	done;
+	if [ $pkgcnt -eq 0 ]; then
+		echo "No packages installed.";
+	else
+		echo "$pkgcnt package(s) present.";
+	fi;
+
+	cd $curwd
+	return;
+}
+
+
+###########################################################################
+# Function:	CreateCntrlFiles
+#
+# Description:	This function is responsible for creating the four
+#		control files which regulate the installation of the package.
+#		To do this two files must be created in the installation
+#		directory.  The names of these files are specials and
+#		filelist.  The specials file contains a list of 'special'
+#		files which will be created with the CPIO facility.  The
+#		most common type of file in this list is a directory entry
+#		but soft-links, nodes, fifos and socketes may be other
+#		potential candidates.
+#
+# Arguements:	This function takes a single arguement, the base name of
+#		the package which is being created.
+#
+# Output:	If this function is successful there will be a sub-directory
+#		created in the installation directory which will contain
+#		the four distribution files.  The name of the sub-directory
+#		will be the name of the package and the files in that
+#		directory will have the name of the package with the following
+#		four suffixes appended:  .pm, .fl, .sp, .tm
+#
+#		The contents of these files will be as follows:
+#
+#			.pm:	A permissions file which contains the proper
+#				mode, owner, group and name of each file
+#				needed for the package.
+#
+#			.fl:	A list of non 'special' files needed for this
+#				package.
+#
+#			.sp:	A list of 'special' files needed for the
+#				package.
+#
+#			.tm:	A CPIO 'template' file which if unpacked
+#				will create the directory tree and all
+#				special files needed for the package.
+###########################################################################
+
+CreateCntrlFiles(){
+	# Local variables.
+	pkg=$1;
+	
+	# Check to make sure the two necessary files are here.
+	if [ ! -f $curwd/$specials ]; then
+		ErrorExit "List of special files not found.";
+	fi;
+	if [ ! -f $curwd/$filelist ]; then
+		ErrorExit "List of regular files not found.";
+	fi;
+
+	# Make sure that the installation directory is present.
+	if [ ! -d $installpath ]; then
+		echo "\tInstallation directory not found - creating it.";
+		mkdir $installpath || \
+			ErrorExit "Cannot create installation directory.";
+	fi;
+
+	# Create the CPIO template file.
+	cd $rootdir;
+	cpio -ocv <$curwd/$specials >$installdir/$template 2>/dev/null
+	if [ $?	-gt 0 ]; then
+		ErrorExit "Error creating specials file."
+	fi;
+
+	# Now the permissions file is created, directory & specials first.
+	ls -ldn `cat $curwd/$specials $curwd/$filelist` | sed -e 's/ +/ /g' \
+		| cut -d ' ' -f 1,3,4,9 >$installdir/$permissions;
+	if [ $? -gt 0 ]; then
+		ErrorExit "Error creating permissions file."
+	fi;
+
+	# Now copy the file lists over to the installation directory.
+	cd $curwd;
+	if [ "$curwd" != "$installpath" ]; then
+		cp "$curwd/$specials" "$curwd/$filelist" $installpath ||
+			ErrorExit "Cannot move filelists to installation" \
+				  "directory.";
+	fi;
+
+
+	return 0;
+}
+
+
+###########################################################################
+# Function:	EmitStdInstall
+#
+# Description:	This function copies to its standard output the default
+#		installation program.
+#
+# Arguements:	None specified.
+#
+# Output:	As above.
+###########################################################################
+
+EmitStdInstall(){
+cat - <<END_OF_INSTALL_PGM
+# Emit package name and version number.
+PrintVersion(){
+	echo "\$pkg\c"
+	if [ -z "\$version" ]; then
+		echo " - No Version information.";
+	else
+		echo " - Version: \$version";
+	fi;
+}
+
+# Routine to perform package extraction.
+ExtractPackage(){
+	echo "\tInstalling.";
+	cd \$root;
+	cpio -icd <$installdir/$template 2>/dev/null;
+	tar -xpMT ./$installdir/$filelist -f \$source;
+
+	cd $installdir;
+	mkdir \$pkg;
+	cd \$pkg;
+	mv ../$filelist \$pkg.fl;
+	mv ../$specials \$pkg.sp;
+	mv ../$permissions \$pkg.pm;
+	mv ../$template \$pkg.tm;
+	mv ../$install \$pkg.in;
+
+	cd \$curwd;
+	return;
+}
+	
+
+# Execution begins here, start with arguement parsing.
+while getopts "f:r:uvx" arg;
+do
+	case \$arg in
+		f) source=\$OPTARG;;
+		r) root=\$OPTARG;;
+		u) action=uninstall;;
+		v) action=version;;
+		x) ;;
+	esac;
+done;
+
+case \$action in
+	version)
+		PrintVersion;;
+	uninstall)
+		RemovePackageHook;;
+	extract)
+		echo "Installing" \`PrintVersion\`;
+		PreInstallHook;
+		ExtractPackage;
+		PostInstallHook;
+		echo \`PrintVersion\` "installation complete.";;
+esac;
+
+exit 0;
+END_OF_INSTALL_PGM
+
+return;
+}
+
+
+###########################################################################
+# Function:	CreateInstallPgm
+#
+# Description:	This function is responsible for printing to the standard
+#		output a copy of the installation program which will be
+#		needed to install the archived package.
+#
+#		The installation program consists of four parts.  A basic
+#		nucleus program which knows how to unpack the distribution
+#		and three user-supplied hook routines.  Two of these hooks
+#		will be called before and after the unpackaging routine
+#		to allow the ability for setup and post-installation
+#		configuration.  The third hook is called before package
+#		removal begins and can be used to perform cleanup operations
+#		not supplied by the generic package removal facility.
+#
+#		In order to supply a pre- or post- install hook this program
+#		looks in the directory it was started from for the following
+#		filenames: pre-install, post-install and remove-pkg.
+#		If found these files are dumped before the default install
+#		nucleus.
+#
+# Arguements:	Two arguements:
+#
+#		$1:->	The name of the package.
+#		$2:->	The version of the package (optional).
+#
+# Output:	The completed installation program with user-supplied
+#		hook routines will be on the standard output.
+###########################################################################
+
+CreateInstallPgm(){
+	# First the front end.
+	echo "#! /bin/sh";
+	echo "# $1 installation program - auto-generated by STOPALOP.\n";
+	echo "# Variable definitions.";
+	echo "pkg=$1;";
+	if [ "$2" != "" ]; then
+		echo "version=\"$2\";";
+	fi;
+	echo "action=extract;";
+	echo "source=/dev/fd0;";
+	echo "root=$rootdir;";
+	echo "curwd=\`pwd\`;";
+
+	# Dump the user supplied hooks.
+	echo "\n# Pre-installation hook.";
+	echo "PreInstallHook(){";
+	if [ -f ./pre-install ]; then
+		echo "	echo \"\tExecuting pre-install hook.\";";
+		cat ./pre-install;
+	else
+		echo "	echo \"\tNo pre-installation hook.\";";
+	fi;
+	echo "}";
+
+	echo "\n# Post-installation hook.";
+	echo "PostInstallHook(){";
+	if [ -f ./post-install ]; then
+		echo "	echo \"\tExecuting post-install hook.\";";
+		cat ./post-install;
+	else
+		echo "	echo \"\tNo post-installation hook.\";";
+	fi;
+	echo "}";
+
+	# Create the package removal hook.
+	echo "\n# Package removal hook.";
+	echo "RemovePackageHook(){";
+	if [ -f ./remove-pkg ]; then
+		echo "  echo \"\tExecuting package removal hook.\";";
+		cat ./remove-pkg;
+	else
+		echo "  echo \"\tNo package removal hook.\";";
+	fi;
+	echo "}";
+
+	# Now the installation nucleus.
+	echo "\n# Installation program starts here.";
+	if [ -f ./install ]; then
+		cat ./install;
+	else
+		EmitStdInstall;
+	fi;
+
+	return;
+}
+
+
+###########################################################################
+# Function:	CreateArchive
+#
+# Description:	This function creates the tar archive of the installation
+#		package.
+#
+# Arguements:	None specified.
+#
+# Output:	If this function is successful a tar file containing the
+#		the four control files, the installation program and
+#		the package to be installed will be created.
+###########################################################################
+
+CreateArchive(){
+	# A temporary file needs to be created which contains the names
+	# of the files needed to be dumped.
+	dumpfile=$curwd/$$.fl;
+	echo "./$installdir/$filelist" >$dumpfile;
+	echo "./$installdir/$specials" >>$dumpfile;
+	echo "./$installdir/$template" >>$dumpfile;
+	echo "./$installdir/$permissions" >>$dumpfile;
+	echo "./$installdir/$install" >>$dumpfile;
+	cat ./$filelist >>$dumpfile;
+
+	# Create the archive and cleanup.
+	cd $rootdir;
+	tar -cpMT $dumpfile -f $source;
+
+	cd $installdir;
+	echo "Created package: \c";
+	./$install -v;	
+	rm $filelist $specials $template $permissions $install $dumpfile;
+	cd $curwd;
+	return;
+}
+
+
+###########################################################################
+# Function:	InstallPackage
+#
+# Description:	This function initiates the installation of a distribution
+#		which has been packaged with STOPALOP;
+#
+# Arguements:	None specified.
+#
+# Returns:	Nothing.
+###########################################################################
+
+InstallPackage(){
+	# Make sure that the root of the installation tree exists.
+	if [ ! -d $rootdir ]; then
+		ErrorExit "Root directory, $rootdir does not exist.";
+	fi;
+	cd $rootdir;
+	DisplayHeader;
+
+	# Unpack the installation directory check to make sure that this
+	# is a valid STOPALOP prepared package.
+	tar -xpf $source ./$installdir/\* \
+		|| echo "Please disregard error message if you are" \
+			"unpacking a multi-volume archive.";
+	if [ ! -f $installdir/$filelist -o ! -f $installdir/$specials -o \
+	     ! -f $installdir/$template -o ! -f $installdir/$permissions -o \
+	     ! -f $installdir/$install ]; then
+		ErrorExit "Package is not a valid STOPALOP distribution.";
+	fi;
+
+	# Now call the installation program to do the unpackaging.
+	cd $curwd;
+	$installpath/$install -x -f $source -r $rootdir;
+	return;
+}
+
+
+###########################################################################
+# Function:	RemoveFiles
+#
+# Description:	This function removes files which are presented to it on
+#		its standard input.  The user specifies via the command
+#		line arguement whether 'regular' files should be removed
+#		or whether 'all' files should be removed.  Specifying
+#		regular will cause directory entries to be excluded.  The
+#		all arguement will use a test to determine if a filename
+#		is a directory and will attempt to use the rmdir command
+#		on a directory.
+#
+# Arguements:	One, see description above.
+#
+# Returns:	Nothing
+###########################################################################
+
+RemoveFiles(){
+	cd $rootdir;
+	# Code to remove all files but directories.
+	if [ "$1" = "regular" ]; then
+		while read input;
+		do
+			if [ \! -d $input ]; then
+				rm $input;
+			fi;
+		done;
+	fi;
+
+	# Code to remove all files including directories.  I know the
+	# check is not needed needed but paranoia tells me bad things may
+	# happen if this function is indiscriminately called.  This may
+	# prevent a disaster.
+	if [ "$1" = "all" ]; then
+		while read input;
+		do
+			if [ -d $input ]; then
+				rmdir $input 2>/dev/null \
+					|| echo "Cannot remove directory" \
+						"$input.";
+			fi;
+		done;
+	fi;
+
+	cd $curwd;
+	return;
+}
+	
+
+###########################################################################
+# Function:	RemovePackage
+#
+# Description:	This function removes all regular files, special files,
+#		directory files and installation files associated with
+#		a package.
+#
+# Arguements:	One argument.
+#
+#		$1:->	The name of the package to remove.
+#
+# Returns:	Nothing.
+###########################################################################
+
+RemovePackage(){
+	# First find out if the package is installed and is complete.
+	if [ \! -d $installpath/$1 ]; then
+		ErrorExit "$1 is not an installed package.";
+	fi;
+	cd $installpath/$pkg;
+	if [ ! -f $1.fl -o ! -f $1.sp -o  ! -f $1.tm -o  ! -f $1.pm -o \
+		! -f $1.in ]; then
+			ErrorExit "$1 is not completely installed.";
+	fi;
+
+
+	# Now remove all files.  Start by calling the package specific
+	# removal code and then regular files followed by directories.
+	cd $curwd;
+	DisplayHeader;
+	echo "Removing: " "`$installpath/$1/$1.in -v`";
+	$installpath/$1/$1.in -u;
+
+	RemoveFiles regular <$installpath/$1/$pkg.fl;
+	RemoveFiles regular <$installpath/$1/$pkg.sp;
+	RemoveFiles all     <$installpath/$1/$pkg.sp;
+
+	# Now kill the control directory and we are done.
+	rm -r $installpath/$1;
+	cd $curwd;
+
+	return;
+}
+
+
+###########################################################################
+# Function:	CheckFileIntegrity
+#
+# Description:	This function checks the integrity of each component
+#		member of a package.
+#
+# Arguements:	None
+#
+# Returns:	Warning is issued for each improper configuration found.
+###########################################################################
+
+CheckFileIntegrity(){
+	cd $rootdir;
+	while read permline;
+	do
+		fname=`echo $permline | cut -d ' ' -f4`;
+		if [ ! -e $fname ]; then
+			echo "\tFile not found: $fname";
+			echo "\t\tneed: $permline";
+		else
+			fileperm=`ls -lnd $fname | sed -e 's/ +/ /g' | \
+				cut -d ' ' -f 1,3,4`;
+			permline=`echo $permline | cut -d ' ' -f1,2,3`;
+			if [ "$permline" != "$fileperm" ]; then
+				echo "\tPermission/ownership error: $fname";
+				echo "\t\tShould be: $permline";
+				echo "\t\tInstalled: $fileperm";
+			fi;
+		fi;
+	done;
+
+	return;
+}
+
+
+###########################################################################
+# Function:	CheckPackageIntegrity
+#
+# Description:	This function is responsible for checking the integrity of
+#		a package installed and maintained by STOPALOP.  These
+#		integrity checks include:
+#
+#			1:->	File existence.
+#			2:->	Permissions.
+#			3:->	Ownership.
+#			4:->	Group.
+#
+# Arguement:	One arguement, the name of the package to check.
+#
+# Returns:	Nothing.
+###########################################################################
+
+CheckPackageIntegrity(){
+	# Check to make sure the package is installed and complete.
+	if [ \! -d $installpath/$1 ]; then
+		ErrorExit "$1 is not an installed package.";
+	fi;
+	cd $installpath/$pkg;
+	if [ ! -f $1.fl -o ! -f $1.sp -o  ! -f $1.tm -o  ! -f $1.pm -o \
+		! -f $1.in ]; then
+			ErrorExit "$1 is not completely installed.";
+	fi;
+
+	# The actual checking of permissions is carried out be a separate
+	# function so we simply feed the permissions file to this function.
+	cd $curwd;
+	DisplayHeader;
+	echo "Checking installation of: " "`$installpath/$1/$1.in -v`";
+	CheckFileIntegrity <$installpath/$1/$1.pm;
+
+	cd $curwd;
+	return;
+}
+
+
+#**************************************************************************
+#* Function:	GenerateFilelist
+#*
+#* Purpose:	This function generates the specials and filelist files
+#*		which contain the lists of files which are to be included
+#*		in the package.
+#*
+#* Arguements:	None specified.
+#*
+#* Return:	Nothing.
+#**************************************************************************/
+
+GenerateFilelist(){
+	cd $rootdir;
+
+	# First the 'special' files.
+	find ./ \! -type f -depth | sed -e '/^..'$installdir'/ d' >$specials;
+
+	# Then the 'regular' files.
+	find ./ -type f | sed -e '/^..'$specials'/ d; /^..install/d;' \
+		-e '/^..pre-install/ d; /^..post-install/ d;' \
+		-e '/^..'$filelist'/ d; /^..version/ d;' \
+		-e '/^..'$installdir'/ d' \
+		-e '/^..remove-pkg/ d' >$filelist;
+
+	cd $curwd;
+	return;
+}
+
+
+
+###########################################################################
+# Main Program
+###########################################################################
+while getopts "?c:f:gi:lr:u:v:x" arg;
+do
+	case $arg in
+		[?]) action=usage;;
+		c)  action=create; pkg=$OPTARG;;
+		i)  action=check; pkg=$OPTARG;;
+		l)  action=listpkg;;
+		u)  action=whack; pkg=$OPTARG;;
+		x)  action=extract;;
+
+		g)  pkglist="generate";;
+		f)  source=$OPTARG;;
+		r)  rootdir=$OPTARG;;
+		v)  pkgversion=$OPTARG;;
+	esac;
+done;
+
+
+# Fix some variables.
+if [ "$rootdir" = "/" ]; then
+	installpath=$rootdir$installdir;
+else
+	installpath=$rootdir/$installdir;
+fi;
+case $source in
+	[^/]*)	source=`pwd`/$source;;
+esac;
+
+
+# Generate the file lists if so requested.
+if [ "$pkglist" = "generate" ]; then
+	GenerateFilelist;
+	if [ $action = "whoami" ]; then
+		action="null";
+	fi;
+fi;
+
+
+# Vector execution.
+case $action in
+	whoami)
+		DisplayHeader;
+		echo "-? for usage summary.";;
+	usage)
+		Usage;;
+	check)
+		CheckPackageIntegrity $pkg;;
+	create)
+		DisplayHeader;
+		# Get version number from reference file if not specified.
+		if [ "$pkgversion" = "" -a -f "./version" ]; then
+			pkgversion=`cat ./version`;
+			echo "\tVersion auto-defined to: $pkgversion";
+		fi;
+		CreateCntrlFiles $pkg "$pkgversion";
+		CreateInstallPgm $pkg "$pkgversion" >$installpath/install;
+		chmod +x $installpath/$install;
+		CreateArchive $pkg $pkgversion;;
+	listpkg)
+		ListPackages;;
+	extract)
+		InstallPackage;;
+	whack)
+		RemovePackage $pkg;;
+esac;
+
+exit 0;
