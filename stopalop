@@ -1,4 +1,12 @@
 #! /bin/sh
+# Enable strict mode but remain portable.
+set -eu
+if (set -o pipefail) 2>/dev/null; then
+    set -o pipefail
+fi
+
+# Default permissions: world-readable installs, private temp files
+umask 022
 #*****************************************************************************
 #* $Source: /u/gnu/linux/src/bin/stopalop/RCS/stopalop,v $
 #*
@@ -102,10 +110,10 @@
 # Definition of useful variables.
 version="Beta 0.10";
 action=whoami;
-if [ $squashing_bugs ]; then source=StopAlop.tar; else source=/dev/fd0; fi;
+if [ "${squashing_bugs:-}" ]; then source=StopAlop.tar; else source=/dev/fd0; fi;
 
-curwd=`pwd`;
-if [ $squashing_bugs ]; then rootdir=`pwd`; else rootdir=/; fi;
+curwd=$(pwd);
+if [ "${squashing_bugs:-}" ]; then rootdir=$(pwd); else rootdir=/; fi;
 installdir=INSTALL;
 
 filelist="filelist";
@@ -113,6 +121,25 @@ specials="specials";
 template="template";
 permissions="permissions";
 install="install";
+
+# Lock management to avoid concurrent runs
+lockdir="/tmp/stopalop.lock"
+locked=0
+AcquireLock(){
+        if mkdir "$lockdir" 2>/dev/null; then
+                locked=1
+                trap 'ReleaseLock' EXIT
+        else
+                echo "stopalop: another instance is running" >&2
+                exit 1
+        fi
+}
+ReleaseLock(){
+        if [ "$locked" -eq 1 ]; then
+                rmdir "$lockdir"
+                locked=0
+        fi
+}
 
 
 ###########################################################################
@@ -125,8 +152,8 @@ install="install";
 ###########################################################################
 
 ErrorExit(){
-	echo $*;
-	exit 1;
+        echo "$*";
+        exit 1;
 }
 
 
@@ -192,35 +219,35 @@ Usage(){
 ###########################################################################
 
 ListPackages(){
-	declare -i pkgcnt=0;
+        declare -i pkgcnt=0;
 
-	# Check to make sure that STOPALOP can function.
-	cd $rootdir;
-	if [ ! -d $installdir ]; then
-		ErrorExit "No installation directory.";
-	fi;
+        # Check to make sure that STOPALOP can function.
+        cd "$rootdir";
+        if [ ! -d "$installdir" ]; then
+                ErrorExit "No installation directory.";
+        fi;
 
-	# Now have each package tell us who it is.
-	DisplayHeader;
-	cd $installdir;
-	for package in *;
-	do
-		if [ -f ./$package/$package.in ]; then
-			if [ $pkgcnt -eq 0 ]; then
-				echo "Packages installed:";
-			fi;
+        # Now have each package tell us who it is.
+        DisplayHeader;
+        cd "$installdir";
+        for package in *;
+        do
+                if [ -f "./$package/$package.in" ]; then
+                if [ "$pkgcnt" -eq 0 ]; then
+                                echo "Packages installed:";
+                        fi;
 			echo "\t\c";
 			./$package/$package.in -v;
 			pkgcnt=$pkgcnt+1;
 		fi;
 	done;
-	if [ $pkgcnt -eq 0 ]; then
+        if [ "$pkgcnt" -eq 0 ]; then
 		echo "No packages installed.";
 	else
 		echo "$pkgcnt package(s) present.";
 	fi;
 
-	cd $curwd
+	cd "$curwd"
 	return;
 }
 
@@ -270,38 +297,38 @@ CreateCntrlFiles(){
 	pkg=$1;
 	
 	# Check to make sure the two necessary files are here.
-	if [ ! -f $curwd/$specials ]; then
-		ErrorExit "List of special files not found.";
-	fi;
-	if [ ! -f $curwd/$filelist ]; then
-		ErrorExit "List of regular files not found.";
-	fi;
+        if [ ! -f "$curwd/$specials" ]; then
+                ErrorExit "List of special files not found.";
+        fi;
+        if [ ! -f "$curwd/$filelist" ]; then
+                ErrorExit "List of regular files not found.";
+        fi;
 
 	# Make sure that the installation directory is present.
-	if [ ! -d $installpath ]; then
+	if [ ! -d "$installpath" ]; then
 		echo "\tInstallation directory not found - creating it.";
-		mkdir $installpath || \
+		mkdir "$installpath" || \
 			ErrorExit "Cannot create installation directory.";
 	fi;
 
 	# Create the CPIO template file.
-	cd $rootdir;
-	cpio -ocv <$curwd/$specials >$installdir/$template 2>/dev/null
+	cd "$rootdir";
+	cpio -ocv <"$curwd/$specials" >"$installdir/$template" 2>/dev/null
 	if [ $?	-gt 0 ]; then
 		ErrorExit "Error creating specials file."
 	fi;
 
 	# Now the permissions file is created, directory & specials first.
-	ls -ldn `cat $curwd/$specials $curwd/$filelist` | sed -e 's/ +/ /g' \
-		| cut -d ' ' -f 1,3,4,9 >$installdir/$permissions;
+        ls -ldn $(cat "$curwd/$specials" "$curwd/$filelist") | sed -e 's/ +/ /g' \
+                | cut -d ' ' -f 1,3,4,9 >"$installdir/$permissions";
 	if [ $? -gt 0 ]; then
 		ErrorExit "Error creating permissions file."
 	fi;
 
 	# Now copy the file lists over to the installation directory.
-	cd $curwd;
+	cd "$curwd";
 	if [ "$curwd" != "$installpath" ]; then
-		cp "$curwd/$specials" "$curwd/$filelist" $installpath ||
+		cp "$curwd/$specials" "$curwd/$filelist" "$installpath" ||
 			ErrorExit "Cannot move filelists to installation" \
 				  "directory.";
 	fi;
@@ -336,22 +363,22 @@ PrintVersion(){
 
 # Routine to perform package extraction.
 ExtractPackage(){
-	echo "\tInstalling.";
-	cd \$root;
-	cpio -icd <$installdir/$template 2>/dev/null;
-	tar -xpMT ./$installdir/$filelist -f \$source;
+        echo "\tInstalling.";
+        cd "\$root";
+        cpio -icd <"$installdir/$template" 2>/dev/null;
+        tar -xpMT "./$installdir/$filelist" -f "\$source";
 
-	cd $installdir;
-	mkdir \$pkg;
-	cd \$pkg;
-	mv ../$filelist \$pkg.fl;
-	mv ../$specials \$pkg.sp;
-	mv ../$permissions \$pkg.pm;
-	mv ../$template \$pkg.tm;
-	mv ../$install \$pkg.in;
+        cd "$installdir";
+        mkdir "\$pkg";
+        cd "\$pkg";
+        mv "../$filelist" "\$pkg.fl";
+        mv "../$specials" "\$pkg.sp";
+        mv "../$permissions" "\$pkg.pm";
+        mv "../$template" "\$pkg.tm";
+        mv "../$install" "\$pkg.in";
 
-	cd \$curwd;
-	return;
+        cd "\$curwd";
+        return;
 }
 	
 
@@ -492,23 +519,24 @@ CreateInstallPgm(){
 CreateArchive(){
 	# A temporary file needs to be created which contains the names
 	# of the files needed to be dumped.
-	dumpfile=$curwd/$$.fl;
-	echo "./$installdir/$filelist" >$dumpfile;
-	echo "./$installdir/$specials" >>$dumpfile;
-	echo "./$installdir/$template" >>$dumpfile;
-	echo "./$installdir/$permissions" >>$dumpfile;
-	echo "./$installdir/$install" >>$dumpfile;
-	cat ./$filelist >>$dumpfile;
+        dumpfile=$(umask 077; mktemp "$curwd/stopalop.XXXXXX.fl") || exit 1;
+        trap 'rm -f "$dumpfile"; ReleaseLock' EXIT;
+        echo "./$installdir/$filelist" >"$dumpfile";
+        echo "./$installdir/$specials" >>"$dumpfile";
+        echo "./$installdir/$template" >>"$dumpfile";
+        echo "./$installdir/$permissions" >>"$dumpfile";
+        echo "./$installdir/$install" >>"$dumpfile";
+        cat "./$filelist" >>"$dumpfile";
 
 	# Create the archive and cleanup.
-	cd $rootdir;
-	tar -cpMT $dumpfile -f $source;
+	cd "$rootdir";
+        tar -cpMT "$dumpfile" -f "$source";
 
-	cd $installdir;
+	cd "$installdir";
 	echo "Created package: \c";
 	./$install -v;	
-	rm $filelist $specials $template $permissions $install $dumpfile;
-	cd $curwd;
+        rm "$filelist" "$specials" "$template" "$permissions" "$install" "$dumpfile";
+        cd "$curwd";
 	return;
 }
 
@@ -526,27 +554,27 @@ CreateArchive(){
 
 InstallPackage(){
 	# Make sure that the root of the installation tree exists.
-	if [ ! -d $rootdir ]; then
-		ErrorExit "Root directory, $rootdir does not exist.";
-	fi;
-	cd $rootdir;
+        if [ ! -d "$rootdir" ]; then
+                ErrorExit "Root directory, $rootdir does not exist.";
+        fi;
+	cd "$rootdir";
 	DisplayHeader;
 
 	# Unpack the installation directory check to make sure that this
 	# is a valid STOPALOP prepared package.
-	tar -xpf $source ./$installdir/\* \
-		|| echo "Please disregard error message if you are" \
-			"unpacking a multi-volume archive.";
-	if [ ! -f $installdir/$filelist -o ! -f $installdir/$specials -o \
-	     ! -f $installdir/$template -o ! -f $installdir/$permissions -o \
-	     ! -f $installdir/$install ]; then
-		ErrorExit "Package is not a valid STOPALOP distribution.";
-	fi;
+        tar -xpf "$source" ./$installdir/* \
+                || echo "Please disregard error message if you are" \
+                        "unpacking a multi-volume archive.";
+        if [ ! -f "$installdir/$filelist" -o ! -f "$installdir/$specials" -o \
+               ! -f "$installdir/$template" -o ! -f "$installdir/$permissions" -o \
+               ! -f "$installdir/$install" ]; then
+                ErrorExit "Package is not a valid STOPALOP distribution.";
+        fi;
 
 	# Now call the installation program to do the unpackaging.
-	cd $curwd;
-	$installpath/$install -x -f $source -r $rootdir;
-	return;
+	cd "$curwd";
+        "$installpath/$install" -x -f "$source" -r "$rootdir";
+        return;
 }
 
 
@@ -568,15 +596,15 @@ InstallPackage(){
 ###########################################################################
 
 RemoveFiles(){
-	cd $rootdir;
+	cd "$rootdir";
 	# Code to remove all files but directories.
 	if [ "$1" = "regular" ]; then
-		while read input;
-		do
-			if [ \! -d $input ]; then
-				rm $input;
-			fi;
-		done;
+                while read input;
+                do
+                        if [ ! -d "$input" ]; then
+                                rm "$input";
+                        fi;
+                done;
 	fi;
 
 	# Code to remove all files including directories.  I know the
@@ -586,15 +614,15 @@ RemoveFiles(){
 	if [ "$1" = "all" ]; then
 		while read input;
 		do
-			if [ -d $input ]; then
-				rmdir $input 2>/dev/null \
+			if [ -d "$input" ]; then
+				rmdir "$input" 2>/dev/null \
 					|| echo "Cannot remove directory" \
 						"$input.";
 			fi;
 		done;
 	fi;
 
-	cd $curwd;
+	cd "$curwd";
 	return;
 }
 	
@@ -615,30 +643,30 @@ RemoveFiles(){
 
 RemovePackage(){
 	# First find out if the package is installed and is complete.
-	if [ \! -d $installpath/$1 ]; then
+	if [ ! -d "$installpath/$1" ]; then
 		ErrorExit "$1 is not an installed package.";
 	fi;
-	cd $installpath/$pkg;
-	if [ ! -f $1.fl -o ! -f $1.sp -o  ! -f $1.tm -o  ! -f $1.pm -o \
-		! -f $1.in ]; then
-			ErrorExit "$1 is not completely installed.";
-	fi;
+	cd "$installpath/$pkg";
+        if [ ! -f "$1.fl" -o ! -f "$1.sp" -o  ! -f "$1.tm" -o  ! -f "$1.pm" -o \
+                ! -f "$1.in" ]; then
+                ErrorExit "$1 is not completely installed.";
+        fi;
 
 
 	# Now remove all files.  Start by calling the package specific
 	# removal code and then regular files followed by directories.
-	cd $curwd;
+	cd "$curwd";
 	DisplayHeader;
-	echo "Removing: " "`$installpath/$1/$1.in -v`";
-	$installpath/$1/$1.in -u;
+	echo "Removing: " "`"$installpath/$1/$1.in" -v`";
+	"$installpath/$1/$1.in" -u;
 
-	RemoveFiles regular <$installpath/$1/$pkg.fl;
-	RemoveFiles regular <$installpath/$1/$pkg.sp;
-	RemoveFiles all     <$installpath/$1/$pkg.sp;
+	RemoveFiles regular <"$installpath/$1/$pkg.fl";
+	RemoveFiles regular <"$installpath/$1/$pkg.sp";
+	RemoveFiles all     <"$installpath/$1/$pkg.sp";
 
 	# Now kill the control directory and we are done.
-	rm -r $installpath/$1;
-	cd $curwd;
+	rm -r "$installpath/$1";
+	cd "$curwd";
 
 	return;
 }
@@ -656,23 +684,23 @@ RemovePackage(){
 ###########################################################################
 
 CheckFileIntegrity(){
-	cd $rootdir;
+	cd "$rootdir";
 	while read permline;
 	do
-		fname=`echo $permline | cut -d ' ' -f4`;
-		if [ ! -e $fname ]; then
-			echo "\tFile not found: $fname";
-			echo "\t\tneed: $permline";
-		else
-			fileperm=`ls -lnd $fname | sed -e 's/ +/ /g' | \
-				cut -d ' ' -f 1,3,4`;
-			permline=`echo $permline | cut -d ' ' -f1,2,3`;
-			if [ "$permline" != "$fileperm" ]; then
-				echo "\tPermission/ownership error: $fname";
-				echo "\t\tShould be: $permline";
-				echo "\t\tInstalled: $fileperm";
-			fi;
-		fi;
+        fname=`echo "$permline" | cut -d ' ' -f4`;
+        if [ ! -e "$fname" ]; then
+                echo "\tFile not found: $fname";
+                echo "\t\tneed: $permline";
+        else
+                fileperm=`ls -lnd "$fname" | sed -e 's/ +/ /g' | \
+                        cut -d ' ' -f 1,3,4`;
+                permline=`echo "$permline" | cut -d ' ' -f1,2,3`;
+                if [ "$permline" != "$fileperm" ]; then
+                        echo "\tPermission/ownership error: $fname";
+                        echo "\t\tShould be: $permline";
+                        echo "\t\tInstalled: $fileperm";
+                fi;
+        fi;
 	done;
 
 	return;
@@ -698,23 +726,23 @@ CheckFileIntegrity(){
 
 CheckPackageIntegrity(){
 	# Check to make sure the package is installed and complete.
-	if [ \! -d $installpath/$1 ]; then
+	if [ ! -d "$installpath/$1" ]; then
 		ErrorExit "$1 is not an installed package.";
 	fi;
-	cd $installpath/$pkg;
-	if [ ! -f $1.fl -o ! -f $1.sp -o  ! -f $1.tm -o  ! -f $1.pm -o \
-		! -f $1.in ]; then
+	cd "$installpath/$pkg";
+	if [ ! -f "$1.fl" -o ! -f "$1.sp" -o  ! -f "$1.tm" -o  ! -f "$1.pm" -o \
+		! -f "$1.in" ]; then
 			ErrorExit "$1 is not completely installed.";
 	fi;
 
 	# The actual checking of permissions is carried out be a separate
 	# function so we simply feed the permissions file to this function.
-	cd $curwd;
+	cd "$curwd";
 	DisplayHeader;
-	echo "Checking installation of: " "`$installpath/$1/$1.in -v`";
-	CheckFileIntegrity <$installpath/$1/$1.pm;
+	echo "Checking installation of: " "`"$installpath/$1/$1.in" -v`";
+	CheckFileIntegrity <"$installpath/$1/$1.pm";
 
-	cd $curwd;
+	cd "$curwd";
 	return;
 }
 
@@ -732,19 +760,19 @@ CheckPackageIntegrity(){
 #**************************************************************************/
 
 GenerateFilelist(){
-	cd $rootdir;
+	cd "$rootdir";
 
 	# First the 'special' files.
-	find ./ \! -type f -depth | sed -e '/^..'$installdir'/ d' >$specials;
+        find ./ \! -type f -depth | sed -e '/^..'$installdir'/ d' >"$specials";
 
 	# Then the 'regular' files.
 	find ./ -type f | sed -e '/^..'$specials'/ d; /^..install/d;' \
 		-e '/^..pre-install/ d; /^..post-install/ d;' \
 		-e '/^..'$filelist'/ d; /^..version/ d;' \
-		-e '/^..'$installdir'/ d' \
-		-e '/^..remove-pkg/ d' >$filelist;
+                -e '/^..'$installdir'/ d' \
+                -e '/^..remove-pkg/ d' >"$filelist";
 
-	cd $curwd;
+	cd "$curwd";
 	return;
 }
 
@@ -755,7 +783,7 @@ GenerateFilelist(){
 ###########################################################################
 while getopts "?c:f:gi:lr:u:v:x" arg;
 do
-	case $arg in
+        case $arg in
 		[?]) action=usage;;
 		c)  action=create; pkg=$OPTARG;;
 		i)  action=check; pkg=$OPTARG;;
@@ -767,25 +795,33 @@ do
 		f)  source=$OPTARG;;
 		r)  rootdir=$OPTARG;;
 		v)  pkgversion=$OPTARG;;
-	esac;
+        esac;
 done;
+
+
+# Validate package name for safety
+safe_pkg_regex='^[A-Za-z0-9._-]*$'
+if [ "${pkg:-}" ] && ! printf '%s' "$pkg" | grep -Eq "$safe_pkg_regex"; then
+        echo "Invalid package name: $pkg" >&2
+        exit 1
+fi
 
 
 # Fix some variables.
 if [ "$rootdir" = "/" ]; then
-	installpath=$rootdir$installdir;
+        installpath=$rootdir$installdir;
 else
 	installpath=$rootdir/$installdir;
 fi;
 case $source in
-	[^/]*)	source=`pwd`/$source;;
+        [^/]* )  source=$(pwd)/"$source";;
 esac;
 
 
 # Generate the file lists if so requested.
 if [ "$pkglist" = "generate" ]; then
 	GenerateFilelist;
-	if [ $action = "whoami" ]; then
+        if [ "$action" = "whoami" ]; then
 		action="null";
 	fi;
 fi;
@@ -799,24 +835,30 @@ case $action in
 	usage)
 		Usage;;
 	check)
-		CheckPackageIntegrity $pkg;;
-	create)
-		DisplayHeader;
-		# Get version number from reference file if not specified.
-		if [ "$pkgversion" = "" -a -f "./version" ]; then
-			pkgversion=`cat ./version`;
-			echo "\tVersion auto-defined to: $pkgversion";
-		fi;
-		CreateCntrlFiles $pkg "$pkgversion";
-		CreateInstallPgm $pkg "$pkgversion" >$installpath/install;
-		chmod +x $installpath/$install;
-		CreateArchive $pkg $pkgversion;;
-	listpkg)
-		ListPackages;;
-	extract)
-		InstallPackage;;
-	whack)
-		RemovePackage $pkg;;
+		CheckPackageIntegrity "$pkg";;
+        create)
+                DisplayHeader;
+                AcquireLock;
+                # Get version number from reference file if not specified.
+                if [ "$pkgversion" = "" -a -f "./version" ]; then
+                        pkgversion=`cat ./version`;
+                        echo "\tVersion auto-defined to: $pkgversion";
+                fi;
+                CreateCntrlFiles "$pkg" "$pkgversion";
+                CreateInstallPgm "$pkg" "$pkgversion" >"$installpath/install";
+                chmod +x "$installpath/$install";
+                CreateArchive "$pkg" "$pkgversion";
+                ReleaseLock;;
+        listpkg)
+                ListPackages;;
+        extract)
+                AcquireLock;
+                InstallPackage;
+                ReleaseLock;;
+        whack)
+                AcquireLock;
+                RemovePackage "$pkg";
+                ReleaseLock;;
 esac;
 
 exit 0;
